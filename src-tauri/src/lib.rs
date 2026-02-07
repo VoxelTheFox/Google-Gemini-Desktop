@@ -2,14 +2,13 @@ use tauri::{
     menu::{Menu, MenuItem},
     tray::{MouseButton, TrayIconBuilder, TrayIconEvent},
     Manager,
-    image::Image, // Add this import
+    image::Image,
 };
 use tauri_plugin_autostart::MacosLauncher;
 use tauri_plugin_global_shortcut::{GlobalShortcutExt, ShortcutState};
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
-    // Load the Javascript file as a string constant
     const DRAG_SCRIPT: &str = include_str!(".././drag.js");
 
     tauri::Builder::default()
@@ -19,7 +18,8 @@ pub fn run() {
         ))
         .plugin(
             tauri_plugin_global_shortcut::Builder::new()
-                .with_handler(|app, shortcut, event| {
+                // FIX 1: Added underscore to `_shortcut` to fix warning
+                .with_handler(|app, _shortcut, event| {
                     if event.state() == ShortcutState::Pressed {
                         let window = app.get_webview_window("main").unwrap();
                         if window.is_visible().unwrap() {
@@ -37,16 +37,16 @@ pub fn run() {
         })
         .setup(|app| {
             // --- LOAD TRAY ICONS ---
-            // 1. For macOS: Load the monochrome template icon
             #[cfg(target_os = "macos")]
             let tray_icon = Image::from_bytes(include_bytes!("../icons/tray.png")).unwrap();
 
-            // 2. For Windows/Linux: Use the regular app icon
+            // FIX 2: Use a PNG for Windows (ICO causes the crash!)
+            // We use the 32x32.png that Tauri generates by default
             #[cfg(not(target_os = "macos"))]
-            let tray_icon = Image::from_bytes(include_bytes!("../icons/icon.ico")).unwrap();
+            let tray_icon = Image::from_bytes(include_bytes!("../icons/32x32.png")).unwrap();
 
-            // --- BUILD TRAY ---
-            let mut tray_builder = TrayIconBuilder::new()
+            // FIX 3: Removed `mut` because Windows doesn't need to modify the builder
+            let tray_builder = TrayIconBuilder::new()
                 .icon(tray_icon)
                 .show_menu_on_left_click(false)
                 .on_menu_event(|app, event| match event.id.as_ref() {
@@ -76,12 +76,10 @@ pub fn run() {
                     _ => {}
                 });
 
-            // --- APPLY MACOS SPECIFIC TEMPLATE SETTING ---
-            // This is what makes it adapt to light/dark mode automatically
+            // --- MACOS SPECIFIC ---
+            // We have to use a separate block for the mutable logic to avoid the warning on Windows
             #[cfg(target_os = "macos")]
-            {
-                tray_builder = tray_builder.icon_as_template(true);
-            }
+            let tray_builder = tray_builder.icon_as_template(true);
 
             // --- CREATE MENU ---
             let quit_i = MenuItem::with_id(app, "quit", "Quit", true, None::<&str>)?;
@@ -93,7 +91,7 @@ pub fn run() {
                 .menu(&menu)
                 .build(app)?;
 
-            // --- GLOBAL SHORTCUT REGISTRATION ---
+            // --- GLOBAL SHORTCUT ---
             #[cfg(target_os = "macos")]
             let hotkey = "Command+G";
             #[cfg(not(target_os = "macos"))]
