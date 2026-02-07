@@ -1,6 +1,6 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
-  "productName": "gemini-desktop-tauri",
+  "productName": "Google Gemini",
   "version": "0.1.0",
   "identifier": "com.voxel.gemini-desktop-tauri",
   "build": {
@@ -20,9 +20,10 @@
         "height": 600,
         
 
-        "decorations": false,   
-        "transparent": true,   
-        "shadow": true,         
+        "decorations": false,
+        "transparent": true,
+        "shadow": true,
+        "skipTaskbar": true,
         
 
         "alwaysOnTop": true,    

@@ -3,15 +3,19 @@ use tauri::{
     tray::{MouseButton, TrayIconBuilder, TrayIconEvent},
     Manager,
     image::Image,
-    command, // Import command
-    Window,  // Import Window
+    command,
+    Window,
 };
 use tauri_plugin_autostart::MacosLauncher;
 use tauri_plugin_autostart::ManagerExt;
 use tauri_plugin_global_shortcut::{GlobalShortcutExt, ShortcutState};
 
-// --- 1. THE COMMAND ---
-// This function runs when JavaScript calls invoke('start_drag')
+// --- SAFE IMPORTS ---
+#[cfg(target_os = "macos")]
+use objc::{msg_send, sel, sel_impl};
+#[cfg(target_os = "macos")]
+use objc::runtime::{Object, Class};
+
 #[command]
 fn start_drag(window: Window) {
     let _ = window.start_dragging();
@@ -22,9 +26,7 @@ pub fn run() {
     const DRAG_SCRIPT: &str = include_str!("../drag.js");
 
     tauri::Builder::default()
-        // --- 2. REGISTER THE COMMAND ---
         .invoke_handler(tauri::generate_handler![start_drag])
-        
         .plugin(tauri_plugin_autostart::init(
             MacosLauncher::LaunchAgent,
             Some(vec!["--flag"]),
@@ -48,13 +50,29 @@ pub fn run() {
             webview.eval(DRAG_SCRIPT).expect("Failed to inject drag script");
         })
         .setup(|app| {
-            // --- TRAY ICONS ---
+            // ---------------------------------------------------------
+            // 1. MACOS: HIDE FROM DOCK ONLY
+            // ---------------------------------------------------------
+            #[cfg(target_os = "macos")]
+            unsafe {
+                // We only need to tell the App to be an "Accessory" (Hidden from Dock)
+                // We DO NOT touch the window decorations anymore.
+                let cls = Class::get("NSApplication").unwrap();
+                let app_instance: *mut Object = msg_send![cls, sharedApplication];
+                let _: () = msg_send![app_instance, setActivationPolicy: 1]; // 1 = Accessory
+            }
+
+            // ---------------------------------------------------------
+            // 2. TRAY ICONS
+            // ---------------------------------------------------------
             #[cfg(target_os = "macos")]
             let tray_icon = Image::from_bytes(include_bytes!("../icons/tray.png")).unwrap();
             #[cfg(not(target_os = "macos"))]
             let tray_icon = Image::from_bytes(include_bytes!("../icons/32x32.png")).unwrap();
 
-            // --- MENU & TRAY ---
+            // ---------------------------------------------------------
+            // 3. MENU & TRAY
+            // ---------------------------------------------------------
             let quit_i = MenuItem::with_id(app, "quit", "Quit", true, None::<&str>)?;
             let toggle_i = MenuItem::with_id(app, "toggle", "Show/Hide", true, None::<&str>)?;
             let autostart_i = CheckMenuItem::with_id(app, "autostart", "Run on Startup", true, false, None::<&str>)?;
@@ -112,7 +130,9 @@ pub fn run() {
 
             tray_builder.build(app)?;
 
-            // --- HOTKEYS ---
+            // ---------------------------------------------------------
+            // 4. HOTKEYS
+            // ---------------------------------------------------------
             #[cfg(target_os = "macos")]
             let hotkey = "Command+G";
             #[cfg(not(target_os = "macos"))]
