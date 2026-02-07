@@ -10,6 +10,7 @@
   },
   "app": {
     "withGlobalTauri": true,
+    "macOSPrivateApi": true,
     "windows": [
       {
         "label": "main",
@@ -20,7 +21,7 @@
         
 
         "decorations": false,   
-        "transparent": true,    
+        "transparent": true,   
         "shadow": true,         
         
 
@@ -32,7 +33,11 @@
       }
     ],
     "security": {
-      "csp": null
+      "csp": null,
+      "capabilities": [
+        "default",
+        "drag-permission"
+      ]
     }
   },
   "bundle": {

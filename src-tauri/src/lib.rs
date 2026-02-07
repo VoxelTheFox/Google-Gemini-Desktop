@@ -1,18 +1,30 @@
 use tauri::{
-    menu::{Menu, MenuItem, CheckMenuItem}, // Added CheckMenuItem
+    menu::{Menu, MenuItem, CheckMenuItem},
     tray::{MouseButton, TrayIconBuilder, TrayIconEvent},
     Manager,
     image::Image,
+    command, // Import command
+    Window,  // Import Window
 };
 use tauri_plugin_autostart::MacosLauncher;
-use tauri_plugin_autostart::ManagerExt; // Required to access .autolaunch()
+use tauri_plugin_autostart::ManagerExt;
 use tauri_plugin_global_shortcut::{GlobalShortcutExt, ShortcutState};
+
+// --- 1. THE COMMAND ---
+// This function runs when JavaScript calls invoke('start_drag')
+#[command]
+fn start_drag(window: Window) {
+    let _ = window.start_dragging();
+}
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
-    const DRAG_SCRIPT: &str = include_str!(".././drag.js");
+    const DRAG_SCRIPT: &str = include_str!("../drag.js");
 
     tauri::Builder::default()
+        // --- 2. REGISTER THE COMMAND ---
+        .invoke_handler(tauri::generate_handler![start_drag])
+        
         .plugin(tauri_plugin_autostart::init(
             MacosLauncher::LaunchAgent,
             Some(vec!["--flag"]),
@@ -36,32 +48,25 @@ pub fn run() {
             webview.eval(DRAG_SCRIPT).expect("Failed to inject drag script");
         })
         .setup(|app| {
-            // --- LOAD TRAY ICONS ---
+            // --- TRAY ICONS ---
             #[cfg(target_os = "macos")]
             let tray_icon = Image::from_bytes(include_bytes!("../icons/tray.png")).unwrap();
-
             #[cfg(not(target_os = "macos"))]
             let tray_icon = Image::from_bytes(include_bytes!("../icons/32x32.png")).unwrap();
 
-            // --- CREATE MENU ITEMS ---
+            // --- MENU & TRAY ---
             let quit_i = MenuItem::with_id(app, "quit", "Quit", true, None::<&str>)?;
             let toggle_i = MenuItem::with_id(app, "toggle", "Show/Hide", true, None::<&str>)?;
-            
-            // 1. Create the Checkbox Item
             let autostart_i = CheckMenuItem::with_id(app, "autostart", "Run on Startup", true, false, None::<&str>)?;
 
-            // 2. Check current state and update checkbox
             let autostart_manager = app.autolaunch();
             if autostart_manager.is_enabled().unwrap_or(false) {
-                autostart_i.set_checked(true)?;
+                let _ = autostart_i.set_checked(true);
             }
 
-            // 3. Add to Menu
             let menu = Menu::with_items(app, &[&toggle_i, &autostart_i, &quit_i])?;
 
-            // --- TRAY SETUP ---
-            #[allow(unused_mut)]
-            let mut tray_builder = TrayIconBuilder::new()
+            let tray_builder = TrayIconBuilder::new()
                 .menu(&menu)
                 .icon(tray_icon)
                 .show_menu_on_left_click(false)
@@ -77,15 +82,14 @@ pub fn run() {
                         }
                     }
                     "autostart" => {
-                        // 4. Handle the Toggle Logic
-                        let manager = app.autolaunch();
-                        if manager.is_enabled().unwrap_or(false) {
-                            let _ = manager.disable();
-                            autostart_i.set_checked(false).unwrap();
-                        } else {
-                            let _ = manager.enable();
-                            autostart_i.set_checked(true).unwrap();
-                        }
+                         let manager = app.autolaunch();
+                         if manager.is_enabled().unwrap_or(false) {
+                             let _ = manager.disable();
+                             let _ = autostart_i.set_checked(false);
+                         } else {
+                             let _ = manager.enable();
+                             let _ = autostart_i.set_checked(true);
+                         }
                     }
                     _ => {}
                 })
@@ -104,13 +108,11 @@ pub fn run() {
                 });
 
             #[cfg(target_os = "macos")]
-            {
-                tray_builder = tray_builder.icon_as_template(true);
-            }
+            let tray_builder = tray_builder.icon_as_template(true);
 
             tray_builder.build(app)?;
 
-            // --- GLOBAL SHORTCUT ---
+            // --- HOTKEYS ---
             #[cfg(target_os = "macos")]
             let hotkey = "Command+G";
             #[cfg(not(target_os = "macos"))]
