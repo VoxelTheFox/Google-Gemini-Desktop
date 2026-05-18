@@ -74,6 +74,10 @@ To create the final executable (`.exe` for Windows, `.dmg` or `.app` for macOS):
 npm run tauri build
 
 ```
+Hit: 
+ macOS: Command + G
+ Windows: Alt + Space 
+so start using it.
 
 The output will be in `src-tauri/target/release/bundle/`.
 
