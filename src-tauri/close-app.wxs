@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Wix xmlns="http://schemas.microsoft.com/wix/2006/wi" 
+     xmlns:util="http://schemas.microsoft.com/wix/UtilExtension">
+    <Fragment>
+        <util:CloseApplication Id="CloseMyApp" 
+                               Target="Google Gemini.exe" 
+                               CloseMessage="yes" 
+                               PromptToContinue="yes" 
+                               RebootPrompt="no" 
+                               Description="Please close Google Gemini to continue with the installation." />
+        <util:CloseApplication Id="CloseDevMyApp" 
+                               Target="gemini-desktop-tauri.exe" 
+                               CloseMessage="yes" 
+                               PromptToContinue="yes" 
+                               RebootPrompt="no" 
+                               Description="Please close gemini-desktop-tauri to continue with the installation." />
+        <ComponentGroup Id="CloseAppGroup" Directory="INSTALLDIR">
+            <Component Id="CloseAppComp" Guid="3d6dfb85-6b45-4207-9bdf-dbbe08d6d62d">
+                <RegistryValue Root="HKCU" Key="Software\GoogleGeminiDesktop\Installer" Name="CloseAppHook" Type="integer" Value="1" KeyPath="yes" />
+            </Component>
+        </ComponentGroup>
+    </Fragment>
+</Wix>
