@@ -6,6 +6,8 @@ use tauri::{
     command,
     Window,
 };
+#[cfg(target_os = "windows")]
+use std::sync::Mutex;
 use tauri_plugin_autostart::MacosLauncher;
 use tauri_plugin_autostart::ManagerExt;
 use tauri_plugin_global_shortcut::{GlobalShortcutExt, ShortcutState};
@@ -15,6 +17,16 @@ use tauri_plugin_global_shortcut::{GlobalShortcutExt, ShortcutState};
 use objc::{msg_send, sel, sel_impl};
 #[cfg(target_os = "macos")]
 use objc::runtime::{Object, Class};
+
+#[cfg(target_os = "windows")]
+const HOTKEY_ALT: &str = "Alt+Space";
+#[cfg(target_os = "windows")]
+const HOTKEY_CTRL: &str = "Ctrl+Space";
+
+#[cfg(target_os = "windows")]
+struct HotkeyState {
+    current: Mutex<String>,
+}
 
 #[command]
 fn start_drag(window: Window) {
@@ -73,15 +85,32 @@ pub fn run() {
             // ---------------------------------------------------------
             // 3. MENU & TRAY
             // ---------------------------------------------------------
+            #[cfg(target_os = "windows")]
+            app.manage(HotkeyState {
+                current: Mutex::new(HOTKEY_ALT.to_string()),
+            });
+
             let quit_i = MenuItem::with_id(app, "quit", "Quit", true, None::<&str>)?;
             let toggle_i = MenuItem::with_id(app, "toggle", "Show/Hide", true, None::<&str>)?;
             let autostart_i = CheckMenuItem::with_id(app, "autostart", "Run on Startup", true, false, None::<&str>)?;
+            #[cfg(target_os = "windows")]
+            let hotkey_ctrl_i = CheckMenuItem::with_id(
+                app,
+                "hotkey_ctrl",
+                "Use Ctrl+Space",
+                true,
+                false,
+                None::<&str>,
+            )?;
 
             let autostart_manager = app.autolaunch();
             if autostart_manager.is_enabled().unwrap_or(false) {
                 let _ = autostart_i.set_checked(true);
             }
 
+            #[cfg(target_os = "windows")]
+            let menu = Menu::with_items(app, &[&toggle_i, &autostart_i, &hotkey_ctrl_i, &quit_i])?;
+            #[cfg(not(target_os = "windows"))]
             let menu = Menu::with_items(app, &[&toggle_i, &autostart_i, &quit_i])?;
 
             let tray_builder = TrayIconBuilder::new()
@@ -109,6 +138,47 @@ pub fn run() {
                              let _ = autostart_i.set_checked(true);
                          }
                     }
+                    #[cfg(target_os = "windows")]
+                    "hotkey_ctrl" => {
+                        let use_ctrl = match hotkey_ctrl_i.is_checked() {
+                            Ok(checked) => checked,
+                            Err(err) => {
+                                eprintln!("Failed to read hotkey menu state: {err}");
+                                return;
+                            }
+                        };
+                        let desired_hotkey = if use_ctrl { HOTKEY_CTRL } else { HOTKEY_ALT };
+                        let current_hotkey = {
+                            let state = app.state::<HotkeyState>();
+                            let current = state.current.lock().unwrap();
+                            current.clone()
+                        };
+
+                        if current_hotkey == desired_hotkey {
+                            return;
+                        }
+
+                        if let Err(err) = app.global_shortcut().unregister(&current_hotkey) {
+                            eprintln!("Failed to unregister hotkey {current_hotkey}: {err}");
+                            if let Err(err) = hotkey_ctrl_i.set_checked(!use_ctrl) {
+                                eprintln!("Failed to restore hotkey menu state: {err}");
+                            }
+                            return;
+                        }
+
+                        if let Err(err) = app.global_shortcut().register(desired_hotkey) {
+                            eprintln!("Failed to register hotkey {desired_hotkey}: {err}");
+                            let _ = app.global_shortcut().register(&current_hotkey);
+                            if let Err(err) = hotkey_ctrl_i.set_checked(!use_ctrl) {
+                                eprintln!("Failed to restore hotkey menu state: {err}");
+                            }
+                            return;
+                        }
+
+                        let state = app.state::<HotkeyState>();
+                        let mut current = state.current.lock().unwrap();
+                        *current = desired_hotkey.to_string();
+                    }
                     _ => {}
                 })
                 .on_tray_icon_event(|tray, event| match event {
@@ -135,7 +205,9 @@ pub fn run() {
             // ---------------------------------------------------------
             #[cfg(target_os = "macos")]
             let hotkey = "Command+G";
-            #[cfg(not(target_os = "macos"))]
+            #[cfg(target_os = "windows")]
+            let hotkey = HOTKEY_ALT;
+            #[cfg(all(not(target_os = "macos"), not(target_os = "windows")))]
             let hotkey = "Alt+Space";
             
             app.global_shortcut().register(hotkey)?;
