@@ -62,7 +62,10 @@ npm install
 npm run tauri dev
 
 ```
-
+4. ** Optional. Generate the Frontend Files***
+```bash
+   npm run build
+```
 
 *Note: On macOS, you may need to approve accessibility permissions if prompted for the global hotkey.*
 
